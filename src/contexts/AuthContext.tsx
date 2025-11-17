@@ -1,15 +1,32 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { User } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { auth, db } from "@/integrations/firebase/config";
+import { useNavigate } from "react-router-dom";
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   isAdmin: boolean;
   loading: boolean;
+  adminLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    adminCode?: string
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -17,91 +34,86 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [adminLoading, setAdminLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          setTimeout(() => {
-            checkAdminStatus(session.user.id);
-          }, 0);
-        } else {
-          setIsAdmin(false);
-        }
-      }
-    );
-
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        checkAdminStatus(session.user.id);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        setAdminLoading(true);
+        await checkAdminStatus(currentUser.uid);
+        setAdminLoading(false);
+      } else {
+        setUser(null);
+        setIsAdmin(false);
+        setAdminLoading(false);
       }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
   const checkAdminStatus = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
-      .maybeSingle();
-    
-    setIsAdmin(!!data && !error);
+    try {
+      const userRoleDoc = await getDoc(doc(db, "user_roles", userId));
+      setIsAdmin(userRoleDoc.exists() && userRoleDoc.data()?.role === "admin");
+    } catch (error) {
+      console.error("Error checking admin status:", error);
+      setIsAdmin(false);
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    if (!error) {
-      navigate('/');
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
     }
-    
-    return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl
-      }
-    });
-    
-    if (!error) {
-      navigate('/');
+  const signUp = async (
+    email: string,
+    password: string,
+    adminCode?: string
+  ) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      const isAdmin = adminCode === import.meta.env.VITE_ADMIN_SECRET_CODE;
+      await setDoc(doc(db, "user_roles", userCredential.user.uid), {
+        role: isAdmin ? "admin" : "user",
+        created_at: new Date(),
+      });
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
     }
-    
-    return { error: error as Error | null };
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setIsAdmin(false);
-    navigate('/auth');
+    try {
+      await firebaseSignOut(auth);
+      setIsAdmin(false);
+      setUser(null);
+      navigate("/auth");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isAdmin, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{ user, isAdmin, loading, adminLoading, signIn, signUp, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -110,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

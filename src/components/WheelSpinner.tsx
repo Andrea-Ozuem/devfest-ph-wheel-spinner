@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { motion } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
 
 interface Participant {
   id: string;
@@ -10,27 +10,74 @@ interface WheelSpinnerProps {
   participants: Participant[];
   isSpinning: boolean;
   winner: string | null;
+  spinDuration?: number;
+  finalRotation?: number;
 }
 
-export const WheelSpinner = ({ participants, isSpinning, winner }: WheelSpinnerProps) => {
+export const WheelSpinner = ({
+  participants,
+  isSpinning,
+  winner,
+  spinDuration = 4,
+  finalRotation: externalFinalRotation,
+}: WheelSpinnerProps) => {
   const [rotation, setRotation] = useState(0);
+  const cumulativeRotationRef = useRef(0); // Use ref to avoid re-render loop
   const segmentAngle = participants.length > 0 ? 360 / participants.length : 0;
-  
+
   useEffect(() => {
     if (isSpinning && participants.length > 0) {
-      const winnerIndex = participants.findIndex(p => p.name === winner);
-      const targetAngle = 1800 + (360 - (winnerIndex * segmentAngle)); // Multiple rotations + land on winner
-      setRotation(targetAngle);
+      // If final rotation is provided from parent (physics-based),
+      // use that; otherwise calculate based on winner
+      if (externalFinalRotation !== undefined) {
+        setRotation(externalFinalRotation);
+        cumulativeRotationRef.current = externalFinalRotation;
+      } else {
+        const winnerIndex = participants.findIndex((p) => p.name === winner);
+
+        // Calculate the angle where the winner segment CENTER should land at the top
+        const winnerSegmentCenter = winnerIndex * segmentAngle + (segmentAngle / 2);
+
+        // Normalize current rotation to 0-360 range
+        const currentNormalized = cumulativeRotationRef.current % 360;
+
+        // Calculate the target angle (pointer is at top = 0°)
+        const targetNormalized = (360 - winnerSegmentCenter) % 360;
+
+        // Calculate shortest forward distance to target
+        let forwardDistance =
+          (targetNormalized - currentNormalized + 360) % 360;
+
+        // Add minimum 5 full rotations (1800°) for visual spinning effect
+        const additionalRotation = 1800 + forwardDistance;
+
+        // Calculate new absolute rotation
+        const newRotation = cumulativeRotationRef.current + additionalRotation;
+
+        setRotation(newRotation);
+        cumulativeRotationRef.current = newRotation;
+      }
     }
-  }, [isSpinning, winner, participants, segmentAngle]);
+  }, [
+    isSpinning,
+    winner,
+    participants,
+    segmentAngle,
+    externalFinalRotation,
+  ]);
+
+  // Normalize rotation after spin completes to prevent animation issues
+  useEffect(() => {
+    if (!isSpinning && cumulativeRotationRef.current !== 0) {
+      // Normalize to 0-360 range after spin completes
+      const normalized = cumulativeRotationRef.current % 360;
+      cumulativeRotationRef.current = normalized;
+      setRotation(normalized);
+    }
+  }, [isSpinning]);
 
   const getSegmentColor = (index: number) => {
-    const colors = [
-      'hsl(261 51% 46%)', // Primary purple
-      'hsl(217 89% 61%)', // Accent blue
-      'hsl(261 51% 56%)', // Light purple
-      'hsl(217 89% 71%)', // Light blue
-    ];
+    const colors = ["#EA4335", "#34A853", "#FBBC04", "#4285F4"];
     return colors[index % colors.length];
   };
 
@@ -57,36 +104,36 @@ export const WheelSpinner = ({ participants, isSpinning, winner }: WheelSpinnerP
       <motion.div
         className="absolute inset-0 rounded-full shadow-xl"
         style={{
-          boxShadow: '0 0 40px rgba(94, 53, 177, 0.3)',
+          boxShadow: "0 0 40px rgba(94, 53, 177, 0.3)",
         }}
         animate={{ rotate: rotation }}
         transition={{
-          duration: isSpinning ? 4 : 0,
-          ease: [0.25, 0.46, 0.45, 0.94],
+          duration: isSpinning ? spinDuration : 0,
+          ease: [0.17, 0.67, 0.12, 0.99], // Aggressive ease-out for fast spin → slow stop
         }}
       >
         <svg viewBox="0 0 100 100" className="w-full h-full">
           {participants.map((participant, index) => {
             const startAngle = index * segmentAngle;
             const endAngle = (index + 1) * segmentAngle;
-            
+
             const startRad = (startAngle - 90) * (Math.PI / 180);
             const endRad = (endAngle - 90) * (Math.PI / 180);
-            
+
             const x1 = 50 + 50 * Math.cos(startRad);
             const y1 = 50 + 50 * Math.sin(startRad);
             const x2 = 50 + 50 * Math.cos(endRad);
             const y2 = 50 + 50 * Math.sin(endRad);
-            
+
             const largeArcFlag = segmentAngle > 180 ? 1 : 0;
-            
+
             const pathData = `M 50 50 L ${x1} ${y1} A 50 50 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
-            
+
             const textAngle = startAngle + segmentAngle / 2;
             const textRad = (textAngle - 90) * (Math.PI / 180);
             const textX = 50 + 35 * Math.cos(textRad);
             const textY = 50 + 35 * Math.sin(textRad);
-            
+
             return (
               <g key={participant.id}>
                 <path
@@ -105,21 +152,21 @@ export const WheelSpinner = ({ participants, isSpinning, winner }: WheelSpinnerP
                   dominantBaseline="middle"
                   transform={`rotate(${textAngle}, ${textX}, ${textY})`}
                 >
-                  {participant.name.length > 12 
-                    ? participant.name.substring(0, 12) + '...' 
+                  {participant.name.length > 12
+                    ? participant.name.substring(0, 12) + "..."
                     : participant.name}
                 </text>
               </g>
             );
           })}
-          
+
           {/* Center circle */}
           <circle
             cx="50"
             cy="50"
             r="8"
             fill="white"
-            stroke="hsl(261 51% 46%)"
+            stroke="rgba(226, 226, 226, 1)"
             strokeWidth="2"
           />
         </svg>

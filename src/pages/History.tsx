@@ -1,10 +1,25 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { supabase } from '@/integrations/supabase/client';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Trophy } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { db } from "@/integrations/firebase/config";
+import {
+  collection,
+  query,
+  getDocs,
+  orderBy,
+  where,
+  getCountFromServer,
+} from "firebase/firestore";
+import { Link } from "react-router-dom";
+import { ArrowLeft, Trophy } from "lucide-react";
 
 interface Draw {
   id: string;
@@ -13,7 +28,6 @@ interface Draw {
   is_re_spin: boolean;
   session: {
     name: string;
-    prize: string;
   };
   participant_count?: number;
 }
@@ -27,36 +41,60 @@ const History = () => {
   }, []);
 
   const loadHistory = async () => {
-    const { data: drawsData } = await supabase
-      .from('draws')
-      .select(`
-        *,
-        session:sessions(name, prize, id)
-      `)
-      .order('timestamp', { ascending: false });
+    try {
+      // Get all draws with session data
+      const drawsRef = collection(db, "draws");
+      const drawsQuery = query(drawsRef, orderBy("timestamp", "desc"));
+      const drawsSnapshot = await getDocs(drawsQuery);
 
-    if (drawsData) {
-      // Get participant counts for each session
-      const drawsWithCounts = await Promise.all(
+      const drawsData = drawsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Get session data and participant counts for each draw
+      const drawsWithDetails = await Promise.all(
         drawsData.map(async (draw: any) => {
-          const { count } = await supabase
-            .from('participants')
-            .select('*', { count: 'exact', head: true })
-            .eq('session_id', draw.session.id);
+          // Get session details
+          const sessionsRef = collection(db, "sessions");
+          const sessionQuery = query(
+            sessionsRef,
+            where("id", "==", draw.session_id)
+          );
+          const sessionSnapshot = await getDocs(sessionQuery);
+          const sessionDoc = sessionSnapshot.docs[0]?.data();
 
-          const { count: totalDraws } = await supabase
-            .from('draws')
-            .select('*', { count: 'exact', head: true })
-            .eq('session_id', draw.session.id);
-          
+          // Count participants
+          const participantsRef = collection(db, "participants");
+          const participantsQuery = query(
+            participantsRef,
+            where("session_id", "==", draw.session_id)
+          );
+          const participantsCount = await getCountFromServer(participantsQuery);
+
+          // Count all draws for this session
+          const allDrawsRef = collection(db, "draws");
+          const allDrawsQuery = query(
+            allDrawsRef,
+            where("session_id", "==", draw.session_id)
+          );
+          const allDrawsCount = await getCountFromServer(allDrawsQuery);
+
           return {
             ...draw,
-            participant_count: (count || 0) + (totalDraws || 0),
+            session: {
+              name: sessionDoc?.name || "Unknown Session",
+              id: draw.session_id,
+            },
+            participant_count:
+              participantsCount.data().count + allDrawsCount.data().count,
           };
         })
       );
 
-      setDraws(drawsWithCounts);
+      setDraws(drawsWithDetails);
+    } catch (error) {
+      console.error("Error loading history:", error);
     }
     setLoading(false);
   };
@@ -82,15 +120,18 @@ const History = () => {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-center py-8 text-muted-foreground">Loading...</p>
+              <p className="text-center py-8 text-muted-foreground">
+                Loading...
+              </p>
             ) : draws.length === 0 ? (
-              <p className="text-center py-8 text-muted-foreground">No draws yet</p>
+              <p className="text-center py-8 text-muted-foreground">
+                No draws yet
+              </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Session</TableHead>
-                    <TableHead>Prize</TableHead>
                     <TableHead>Winner</TableHead>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Participants</TableHead>
@@ -100,10 +141,15 @@ const History = () => {
                 <TableBody>
                   {draws.map((draw) => (
                     <TableRow key={draw.id}>
-                      <TableCell className="font-medium">{draw.session.name}</TableCell>
-                      <TableCell>{draw.session.prize}</TableCell>
-                      <TableCell className="font-bold text-primary">{draw.winner_name}</TableCell>
-                      <TableCell>{new Date(draw.timestamp).toLocaleString()}</TableCell>
+                      <TableCell className="font-medium">
+                        {draw.session.name}
+                      </TableCell>
+                      <TableCell className="font-bold text-primary">
+                        {draw.winner_name}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(draw.timestamp).toLocaleString()}
+                      </TableCell>
                       <TableCell>{draw.participant_count || 0}</TableCell>
                       <TableCell>
                         {draw.is_re_spin && (

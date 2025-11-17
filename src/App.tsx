@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
+import AdminSessionControl from "./pages/AdminSessionControl";
 import History from "./pages/History";
 import NotFound from "./pages/NotFound";
 
@@ -23,8 +24,11 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/admin" element={<Admin />} />
+            <Route
+              path="/admin/session/:sessionId"
+              element={<AdminSessionControl />}
+            />
             <Route path="/history" element={<History />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TooltipProvider>

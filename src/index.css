@@ -1,14 +1,11 @@
+@import "./fonts/style.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    /* GDG/DevFest Color Palette */
     --background: 0 0% 100%;
     --foreground: 240 10% 15%;
 
@@ -18,16 +15,11 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 15%;
 
-    /* GDG Purple - Primary */
-    --primary: 261 51% 46%;
+    --primary: 214 82% 51%;
     --primary-foreground: 0 0% 100%;
-    --primary-light: 261 51% 56%;
-    --primary-dark: 261 51% 36%;
 
-    /* Google Blue - Accent */
     --accent: 217 89% 61%;
     --accent-foreground: 0 0% 100%;
-    --accent-light: 217 89% 71%;
 
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 10% 15%;
@@ -40,70 +32,9 @@ All colors MUST be HSL.
 
     --border: 240 6% 90%;
     --input: 240 6% 90%;
-    --ring: 261 51% 46%;
+    --ring: 214 82% 51%;
 
     --radius: 0.75rem;
-    
-    /* Custom Design Tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(261 51% 46%), hsl(217 89% 61%));
-    --gradient-hero: linear-gradient(180deg, hsl(261 51% 46% / 0.05), hsl(217 89% 61% / 0.05));
-    --shadow-elevated: 0 10px 30px -10px hsl(261 51% 46% / 0.2);
-    --shadow-card: 0 4px 12px hsl(240 10% 15% / 0.08);
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 240 10% 10%;
-    --foreground: 0 0% 98%;
-
-    --card: 240 10% 13%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 240 10% 13%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 261 51% 56%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 240 4% 16%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 240 4% 16%;
-    --muted-foreground: 240 5% 65%;
-
-    --accent: 217 89% 61%;
-    --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
-    --ring: 261 51% 56%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -114,11 +45,18 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: "Product Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+      sans-serif;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Google Sans', 'Roboto', sans-serif;
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Product Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+      sans-serif;
   }
 }
 
@@ -126,7 +64,7 @@ All colors MUST be HSL.
   .animate-spin-wheel {
     animation: spin-to-win 4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
-  
+
   @keyframes spin-to-win {
     0% {
       transform: rotate(0deg);
