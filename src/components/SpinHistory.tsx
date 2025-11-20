@@ -32,6 +32,8 @@ import { RotateCcw } from "lucide-react";
 interface Draw {
   id: string;
   winner_name: string;
+  winner_participant_id?: string;
+  winner_verification_code?: string;
   timestamp: { toDate: () => Date } | Date;
   is_re_spin: boolean;
 }
@@ -65,7 +67,7 @@ export const SpinHistory = ({ sessionId, onRespin }: SpinHistoryProps) => {
 
       setDraws(drawsData);
     } catch (error) {
-      console.error("Error loading draws:", error);
+      // Silently fail
     } finally {
       setLoading(false);
     }
@@ -81,9 +83,15 @@ export const SpinHistory = ({ sessionId, onRespin }: SpinHistoryProps) => {
     setRespinLoading(draw.id);
 
     try {
+      // Generate new participant_id and verification_code for re-added participant
+      const participantId = crypto.randomUUID();
+      const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
+      
       // Add participant back
       await addDoc(collection(db, "participants"), {
+        participant_id: participantId,
         name: draw.winner_name,
+        verification_code: verificationCode,
         session_id: sessionId,
         joined_at: new Date(),
         added_by_admin: true,
@@ -105,7 +113,6 @@ export const SpinHistory = ({ sessionId, onRespin }: SpinHistoryProps) => {
       onRespin?.(draw.winner_name);
       await loadDraws();
     } catch (error) {
-      console.error("Error processing re-spin:", error);
       toast.error("Failed to re-spin");
     } finally {
       setRespinLoading(null);

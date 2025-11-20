@@ -62,7 +62,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userRoleDoc = await getDoc(doc(db, "user_roles", userId));
       setIsAdmin(userRoleDoc.exists() && userRoleDoc.data()?.role === "admin");
     } catch (error) {
-      console.error("Error checking admin status:", error);
       setIsAdmin(false);
     }
   };
@@ -82,6 +81,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     adminCode?: string
   ) => {
     try {
+      if (adminCode && adminCode !== import.meta.env.VITE_ADMIN_SECRET_CODE) {
+        return { error: new Error("Invalid admin secret code") };
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -106,7 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
       navigate("/auth");
     } catch (error) {
-      console.error("Error signing out:", error);
+      // Silently fail
     }
   };
 

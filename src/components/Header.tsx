@@ -1,19 +1,27 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
-import { LogIn, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import logo from "@/assets/image.png";
 
 interface HeaderProps {
   title?: string;
   sessionCode?: string;
   showAdminLinks?: boolean;
+  hasJoinedSession?: boolean;
+  joinedName?: string | null;
+  isSpinning?: boolean;
+  onLeaveSession?: () => void;
 }
 
 export const Header = ({
   title = "DevFest Port Harcourt 2025: Raffle Draw",
   sessionCode,
   showAdminLinks = false,
+  hasJoinedSession = false,
+  joinedName = null,
+  isSpinning = false,
+  onLeaveSession,
 }: HeaderProps) => {
   const { user, isAdmin, signOut } = useAuth();
 
@@ -32,25 +40,42 @@ export const Header = ({
             </code>
           )}
 
+          {hasJoinedSession && joinedName && onLeaveSession && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onLeaveSession}
+              className="gap-2"
+              disabled={isSpinning}
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Leave Session</span>
+              <span className="sm:hidden">Leave</span>
+            </Button>
+          )}
+
           {showAdminLinks && isAdmin && (
-            <>
-              <Button asChild variant="outline">
-                <Link to="/admin">Admin Dashboard</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/history">History</Link>
-              </Button>
-            </>
+            <Button asChild variant="outline">
+              <Link to="/admin">Admin Dashboard</Link>
+            </Button>
           )}
 
           {user ? (
-            <Button onClick={signOut} variant="outline" size="icon">
-              <LogOut className="w-4 h-4" />
+            <Button onClick={signOut} variant="ghost" size="icon" className="group">
+              <img
+                src="/carbon_user-avatar-filled.svg"
+                alt="User avatar"
+                className="w-6 h-6 group-hover:brightness-0 group-hover:saturate-100 group-hover:invert group-hover:sepia group-hover:hue-rotate-180 group-hover:contrast-200"
+              />
             </Button>
           ) : (
-            <Button asChild variant="outline" size="icon">
+            <Button asChild variant="ghost" size="icon">
               <Link to="/auth">
-                <LogIn className="w-4 h-4" />
+                <img
+                  src="/carbon_user-avatar-filled.svg"
+                  alt="User avatar"
+                  className="w-6 h-6 group-hover:brightness-0 group-hover:saturate-100 group-hover:invert group-hover:sepia group-hover:hue-rotate-180 group-hover:contrast-200"
+                />
               </Link>
             </Button>
           )}

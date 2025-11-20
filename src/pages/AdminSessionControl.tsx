@@ -51,7 +51,9 @@ import {
 
 interface Participant {
   id: string;
+  participant_id: string;
   name: string;
+  verification_code: string;
   session_id: string;
 }
 
@@ -80,6 +82,7 @@ const AdminSessionControl = () => {
     useState<Participant | null>(null);
   const [spinDuration, setSpinDuration] = useState(4);
   const [finalRotation, setFinalRotation] = useState<number | undefined>();
+  const [lastProcessedSpinId, setLastProcessedSpinId] = useState<string | null>(null);
 
   // Auth guard
   useEffect(() => {
@@ -105,7 +108,6 @@ const AdminSessionControl = () => {
           navigate("/admin");
         }
       } catch (error) {
-        console.error("Error loading session:", error);
         toast.error("Failed to load session");
       } finally {
         setPageLoading(false);
@@ -137,15 +139,60 @@ const AdminSessionControl = () => {
             } as Participant)
         );
         setParticipants(participantsData);
-      },
-      (error) => {
-        console.error("Error listening to participants:", error);
       }
     );
 
     // Cleanup: unsubscribe when component unmounts or sessionId changes
     return () => unsubscribe();
   }, [sessionId]);
+
+  // set real-time listener for spin state
+  useEffect(() => {
+  if (!sessionId) return;
+
+  const spinStateRef = doc(db, "sessions", sessionId, "spin_state", "current");
+  
+  const unsubscribe = onSnapshot(
+    spinStateRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        const spinData = snapshot.data();
+        
+        // Check if this is a new spin (different spinId) AND recent
+        const isNewSpin = spinData.spinId && spinData.spinId !== lastProcessedSpinId;
+        const isRecentSpin = spinData.timestamp && (Date.now() - spinData.timestamp.toMillis()) < 30000; // 30 seconds
+        
+        if (isNewSpin && isRecentSpin) {
+          // Update local state from Firestore for new spins only
+          setIsSpinning(spinData.isSpinning);
+          setWinner(spinData.winner?.name || null);
+          setWinnerParticipant(spinData.winner);
+          setSpinDuration(spinData.duration);
+          setFinalRotation(spinData.rotation);
+          setLastProcessedSpinId(spinData.spinId);
+          
+          // Show winner announcement after spin duration
+          if (spinData.isSpinning) {
+            setTimeout(() => {
+              setShowConfetti(true);
+              setShowWinnerAnnouncement(true);
+            }, spinData.duration * 1000 + 500);
+          }
+        } else if (!lastProcessedSpinId && spinData.spinId) {
+          // First load - just store the spinId without animating
+          setLastProcessedSpinId(spinData.spinId);
+          // Set other state but keep isSpinning false to prevent animation
+          setWinner(spinData.winner?.name || null);
+          setWinnerParticipant(spinData.winner);
+          setSpinDuration(spinData.duration);
+          setFinalRotation(spinData.rotation);
+        }
+      }
+    }
+  );
+
+  return () => unsubscribe();
+}, [sessionId, lastProcessedSpinId]);
 
   const handleSpin = async () => {
     if (!session || participants.length === 0) {
@@ -155,78 +202,43 @@ const AdminSessionControl = () => {
 
     if (isSpinning) return;
 
+    // Optimistically set spinning state immediately for instant UI feedback
     setIsSpinning(true);
 
     try {
       const functions = getFunctions();
-      console.log("spinning");
       const spinWheel = httpsCallable(functions, "spinWheel");
-      const result = await spinWheel({
+      await spinWheel({
         sessionId: session.id,
       });
-      console.log("Cloud function result:", result);
 
-      const { data } = result as {
-        data: {
-          winner: { id: string; name: string };
-          rotation: number;
-          duration: number;
-          timestamp: number;
-          participantCount: number;
-        };
-      };
-
-      if (!data || !data.winner) {
-        toast.error("Error selecting winner");
-        setIsSpinning(false);
-        return;
-      }
-
-      // Use duration returned from cloud function if present, otherwise fallback
-      const durationFromFn =
-        typeof data.duration === "number" ? data.duration : undefined;
-      const durationToUse = durationFromFn ?? 4; // fallback duration in seconds
-
-      // Set animation properties
-      setSpinDuration(durationToUse);
-      setFinalRotation(data.rotation);
-      setWinner(data.winner.name);
-      setWinnerParticipant({
-        ...data.winner,
-        session_id: session.id,
-      });
-
-      // Show confetti and announcement after spin completes
-      setTimeout(() => {
-        setShowConfetti(true);
-        setShowWinnerAnnouncement(true);
-      }, durationToUse * 1000 + 500); // use computed duration
     } catch (error: any) {
-      console.error("Cloud function error:", error);
-      console.error("Error code:", error?.code);
-      console.error("Error message:", error?.message);
-      console.error("Error details:", error?.details);
       toast.error(`Failed to spin: ${error?.message ?? "unknown error"}`);
+      // Reset spinning state on error
       setIsSpinning(false);
     }
   };
 
-  const processWinner = async (winner: { id: string; name: string }) => {
+  const processWinner = async (winner: { 
+    id: string; 
+    participant_id: string;
+    name: string;
+    verification_code: string;
+  }) => {
     try {
-      // Record the draw
+      // Record the draw with verification info
       await addDoc(collection(db, "draws"), {
         session_id: session!.id,
+        winner_participant_id: winner.participant_id,
         winner_name: winner.name,
+        winner_verification_code: winner.verification_code,
         timestamp: new Date(),
         is_re_spin: false,
       });
 
       // Remove winner from participants
       await deleteDoc(doc(db, "participants", winner.id));
-
-      console.log(`Winner processed: ${winner.name}`);
     } catch (error) {
-      console.error("Error processing winner:", error);
       toast.error("Error processing winner");
       throw error; // Re-throw to be caught by caller
     }
@@ -246,17 +258,14 @@ const AdminSessionControl = () => {
         duration: 5000,
       });
     } catch (error) {
-      console.error("Error processing winner:", error);
       toast.error("Failed to record winner");
     }
 
-    // Clean up UI state after 3 seconds
-    setTimeout(() => {
-      setShowConfetti(false);
-      setIsSpinning(false);
-      setWinner(null);
-      setWinnerParticipant(null);
-    }, 3000);
+    // Clean up UI state immediately
+    setShowConfetti(false);
+    setIsSpinning(false);
+    setWinner(null);
+    setWinnerParticipant(null);
   };
 
   const handleRemoveParticipant = async () => {
@@ -267,7 +276,6 @@ const AdminSessionControl = () => {
       toast.success(`Removed ${participantToRemove.name}`);
       setParticipantToRemove(null);
     } catch (error) {
-      console.error("Error removing participant:", error);
       toast.error("Failed to remove participant");
     }
   };
@@ -447,13 +455,20 @@ const AdminSessionControl = () => {
           }
         }}
       >
-        <DialogContent className="border-2 border-accent bg-gradient-to-br from-primary/5 to-accent/5">
+        <DialogContent className="bg-gradient-to-br from-primary/5 to-accent/5">
           <DialogHeader>
-            <DialogTitle className="text-4xl text-center">🎉</DialogTitle>
-            <h2 className="text-4xl font-bold text-center mt-4">Winner!</h2>
+            <DialogTitle className="text-4xl text-center">🎉 Winner!</DialogTitle>
             <DialogDescription className="text-2xl font-bold text-center text-primary mt-4">
               {winnerParticipant?.name}
             </DialogDescription>
+            {winnerParticipant?.verification_code && (
+              <div className="flex items-center justify-center gap-3 py-4 px-6 bg-card border border-border rounded-lg">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-muted-foreground">Ticket Number:</span>
+                  <span className="font-mono font-bold tracking-wider">{winnerParticipant.verification_code}</span>
+                </div>
+              </div>
+            )}
           </DialogHeader>
           <div className="flex justify-center gap-3 mt-6">
             <Button

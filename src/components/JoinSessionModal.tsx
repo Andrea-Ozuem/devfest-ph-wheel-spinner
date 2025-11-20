@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,20 +13,35 @@ import { collection, query, where, getDocs, addDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { formatSessionCode } from "@/utils/sessionCode";
 
+
 interface JoinSessionModalProps {
   open: boolean;
   onClose: () => void;
   onJoin: (sessionId: string, name: string) => void;
+  initialCode?: string | null;
 }
 
 export const JoinSessionModal = ({
   open,
   onClose,
   onJoin,
+  initialCode,
 }: JoinSessionModalProps) => {
   const [sessionCode, setSessionCode] = useState("");
   const [participantName, setParticipantName] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Auto-fill session code from initialCode prop (when QR code is scanned)
+  useEffect(() => {
+    if (open && initialCode) {
+      setSessionCode(initialCode);
+      toast.success("Session code detected from QR code!");
+    } else if (!open) {
+      // Reset when modal closes
+      setSessionCode("");
+      setParticipantName("");
+    }
+  }, [open, initialCode]);
 
   const handleJoin = async () => {
     if (!sessionCode || !participantName) {
@@ -45,7 +60,6 @@ export const JoinSessionModal = ({
 
     try {
       // Find session by code
-      console.log("🔍 Searching for session with code:", formattedCode);
       const sessionsRef = collection(db, "sessions");
       const sessionQuery = query(
         sessionsRef,
@@ -53,21 +67,14 @@ export const JoinSessionModal = ({
       );
       const sessionSnapshot = await getDocs(sessionQuery);
 
-      console.log("📊 Query result:", {
-        empty: sessionSnapshot.empty,
-        size: sessionSnapshot.size,
-        docs: sessionSnapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-      });
-
       if (sessionSnapshot.empty) {
         toast.error("Invalid session code or session not found");
-        console.error("❌ No session found with code:", formattedCode);
         setLoading(false);
         return;
       }
 
       const sessionDoc = sessionSnapshot.docs[0];
-      const session = { id: sessionDoc.id, ...sessionDoc.data() };
+      const session = { id: sessionDoc.id, ...sessionDoc.data() } as any;
 
       // Check for duplicate names
       const participantsRef = collection(db, "participants");
@@ -90,25 +97,34 @@ export const JoinSessionModal = ({
         toast.info(`Name adjusted to ${finalName} to avoid duplicates`);
       }
 
+      // Generate unique identifiers
+      const participantId = crypto.randomUUID();
+      const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
+
       // Add participant
-      console.log("➕ Adding participant:", { session_id: session.id, name: finalName });
       await addDoc(collection(db, "participants"), {
         session_id: session.id,
+        participant_id: participantId,
         name: finalName,
+        verification_code: verificationCode,
         joined_at: new Date(),
       });
 
-      console.log("✅ Successfully joined session");
-      toast.success(`Joined ${session.name}! Watch the wheel.`);
+      // Store verification info in localStorage for user reference
+      localStorage.setItem(`verification_${session.id}`, JSON.stringify({
+        name: finalName,
+        code: verificationCode,
+        participantId: participantId,
+        sessionId: session.id
+      }));
+
+      toast.success(
+        `Joined ${session.name}! Your ticket number: ${verificationCode}`,
+        { duration: 8000 }
+      );
       onJoin(session.id, finalName);
       onClose();
-      setSessionCode("");
-      setParticipantName("");
     } catch (error: any) {
-      console.error("❌ Error joining session:", error);
-      console.error("Error code:", error?.code);
-      console.error("Error message:", error?.message);
-      
       if (error?.code === "permission-denied") {
         toast.error("Permission denied. Check Firestore rules.");
       } else if (error?.code === "unavailable") {

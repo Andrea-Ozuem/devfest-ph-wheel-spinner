@@ -35,8 +35,9 @@ import {
 } from "firebase/firestore";
 import { generateSessionCode } from "@/utils/sessionCode";
 import { QRCodeSVG } from "qrcode.react";
+import QRCode from "qrcode";
 import { toast } from "sonner";
-import { Plus, Users, Play, Download, Eye } from "lucide-react";
+import { Plus, Users, Play, Eye } from "lucide-react";
 import { Link } from "react-router-dom";
 
 interface Session {
@@ -52,6 +53,7 @@ const Admin = () => {
   const { isAdmin, loading, adminLoading, user, signOut } = useAuth();
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -75,6 +77,7 @@ const Admin = () => {
 
   const loadSessions = async () => {
     try {
+      setSessionsLoading(true);
       const sessionsQuery = query(
         collection(db, "sessions"),
         orderBy("created_at", "desc")
@@ -103,8 +106,9 @@ const Admin = () => {
 
       setSessions(sessionsWithCounts);
     } catch (error) {
-      console.error("Error loading sessions:", error);
       toast.error("Failed to load sessions");
+    } finally {
+      setSessionsLoading(false);
     }
   };
 
@@ -129,7 +133,6 @@ const Admin = () => {
       setNewSession({ name: "" });
       loadSessions();
     } catch (error) {
-      console.error("Error creating session:", error);
       toast.error("Failed to create session");
     }
   };
@@ -142,44 +145,7 @@ const Admin = () => {
       toast.success(`Session ${!session.active ? "activated" : "deactivated"}`);
       loadSessions();
     } catch (error) {
-      console.error("Error updating session:", error);
       toast.error("Failed to update session");
-    }
-  };
-
-  const exportParticipants = async (sessionId: string) => {
-    try {
-      const participantsQuery = query(
-        collection(db, "participants"),
-        where("session_id", "==", sessionId)
-      );
-      const querySnapshot = await getDocs(participantsQuery);
-      const participants = querySnapshot.docs.map((doc) => doc.data());
-
-      if (!participants.length) {
-        toast.error("No participants to export");
-        return;
-      }
-
-      const csv = [
-        ["Name", "Joined At"],
-        ...participants.map((p) => [
-          p.name,
-          new Date(p.joined_at.toDate?.() || p.joined_at).toLocaleString(),
-        ]),
-      ]
-        .map((row) => row.join(","))
-        .join("\n");
-
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `participants-${sessionId}.csv`;
-      a.click();
-    } catch (error) {
-      console.error("Error exporting participants:", error);
-      toast.error("Failed to export participants");
     }
   };
 
@@ -206,14 +172,12 @@ const Admin = () => {
 
       <div className="container mx-auto px-4 py-8">
         {/* Sessions Title */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-bold">Sessions Management</h1>
-          </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold">Sessions Management</h1>
 
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
-              <Button size="lg">
+              <Button size="lg" className="w-full sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 Create Session
               </Button>
@@ -243,7 +207,11 @@ const Admin = () => {
         </div>
 
         {/* Sessions Table */}
-        {sessions.length > 0 ? (
+        {sessionsLoading ? (
+          <div className="text-center p-12">
+            <p className="text-lg text-muted-foreground">Loading sessions...</p>
+          </div>
+        ) : sessions.length > 0 ? (
           <div className="bg-card rounded-lg border border-border overflow-hidden">
             <Table>
               <TableHeader>
@@ -252,9 +220,6 @@ const Admin = () => {
                   <TableHead className="font-semibold">Code</TableHead>
                   <TableHead className="text-right font-semibold">
                     Participants
-                  </TableHead>
-                  <TableHead className="text-center font-semibold">
-                    Status
                   </TableHead>
                   <TableHead className="text-right font-semibold">
                     Actions
@@ -279,19 +244,6 @@ const Admin = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex justify-center">
-                        <div
-                          className={`px-3 py-1 rounded-full text-xs font-semibold inline-flex ${
-                            session.active
-                              ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
-                              : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
-                          }`}
-                        >
-                          {session.active ? "Active" : "Inactive"}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
@@ -301,15 +253,6 @@ const Admin = () => {
                           title="View QR Code"
                         >
                           <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => exportParticipants(session.id)}
-                          className="h-8 w-8 p-0"
-                          title="Export Participants"
-                        >
-                          <Download className="w-4 h-4" />
                         </Button>
                         <Button
                           asChild

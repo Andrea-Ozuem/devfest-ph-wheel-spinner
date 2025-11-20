@@ -8,7 +8,6 @@
  */
 
 const { setGlobalOptions } = require("firebase-functions");
-const { onRequest } = require("firebase-functions/https");
 const logger = require("firebase-functions/logger");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -30,6 +29,7 @@ exports.spinWheel = onCall(async (request) => {
       .firestore()
       .collection("participants")
       .where("session_id", "==", sessionId)
+      .orderBy("joined_at", "asc")
       .get();
 
     if (participantsSnapshot.empty) {
@@ -60,13 +60,40 @@ exports.spinWheel = onCall(async (request) => {
 
     logger.log(`Winner selected: ${winner.name}, Duration: ${Math.round(duration * 100) / 100}s`);
 
+    const spinStateRef = admin
+    .firestore()
+    .collection('sessions')
+    .doc(sessionId)
+    .collection('spin_state')
+    .doc('current');
+
+    // Write spin data to Firestore
+    await spinStateRef.set({
+      isSpinning: true,
+      winner: {
+        id: winner.id,
+        participant_id: winner.participant_id,
+        name: winner.name,
+        verification_code: winner.verification_code
+      },
+      rotation: finalRotation,
+      duration: duration,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      participantCount: participants.length,
+      spinId: crypto.randomUUID() // Unique ID for this spin
+    });
+
+    logger.log(`Spin state written to Firestore for session: ${sessionId}`);
+
     const spinData = {
       winner: {
         id: winner.id,
+        participant_id: winner.participant_id,
         name: winner.name,
+        verification_code: winner.verification_code
       },
       rotation: finalRotation,
-      duration: Math.round(duration * 100) / 100, // Round to 2 decimals
+      duration: Math.round(duration * 100) / 100,
       timestamp: Date.now(),
       participantCount: participants.length
     };

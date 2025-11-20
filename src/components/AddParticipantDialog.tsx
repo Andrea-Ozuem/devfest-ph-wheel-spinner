@@ -37,18 +37,25 @@ export const AddParticipantDialog = ({
 
     setIsLoading(true);
     try {
+      // Generate unique identifiers
+      const participantId = crypto.randomUUID();
+      const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
+
       await addDoc(collection(db, "participants"), {
+        participant_id: participantId,
         name: singleName.trim(),
+        verification_code: verificationCode,
         session_id: sessionId,
         joined_at: new Date(),
         added_by_admin: true,
       });
 
-      toast.success(`Added ${singleName}!`);
+      toast.success(`Added ${singleName}! Ticket #${verificationCode}`, {
+        duration: 5000
+      });
       setSingleName("");
       setOpen(false);
     } catch (error) {
-      console.error("Error adding participant:", error);
       toast.error("Failed to add participant");
     } finally {
       setIsLoading(false);
@@ -68,22 +75,29 @@ export const AddParticipantDialog = ({
 
     setIsLoading(true);
     try {
-      const promises = names.map((name) =>
-        addDoc(collection(db, "participants"), {
+      const promises = names.map((name) => {
+        // Generate unique identifiers for each participant
+        const participantId = crypto.randomUUID();
+        const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
+        
+        return addDoc(collection(db, "participants"), {
+          participant_id: participantId,
           name,
+          verification_code: verificationCode,
           session_id: sessionId,
           joined_at: new Date(),
           added_by_admin: true,
-        })
-      );
+        });
+      });
 
       await Promise.all(promises);
 
-      toast.success(`Added ${names.length} participant(s)!`);
+      toast.success(`Added ${names.length} participant(s) with ticket numbers!`, {
+        duration: 5000
+      });
       setBulkNames("");
       setOpen(false);
     } catch (error) {
-      console.error("Error adding participants:", error);
       toast.error("Failed to add participants");
     } finally {
       setIsLoading(false);
