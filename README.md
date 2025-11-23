@@ -29,23 +29,12 @@ A lightweight, event-ready wheel spinner web app for randomly selecting particip
 - Tailwind CSS
 - Firebase (Auth, Firestore, Cloud Functions)
 
-## Demo
-
-Run locally (instructions below).
-
 ## Prerequisites
 
-- Node 18+ (or Bun)
+- Node 18+
 - Firebase CLI (for deployment of hosting/functions)
 
 ## Install & Run (local)
-
-Using Bun:
-
-```bash
-bun install
-bun dev
-```
 
 Using npm:
 
@@ -53,8 +42,6 @@ Using npm:
 npm install
 npm run dev
 ```
-
-The project uses Vite; the `dev` script runs the local dev server.
 
 ## Environment variables
 
@@ -77,7 +64,7 @@ VITE_ADMIN_SECRET_CODE=your_admin_code
 
 These correspond to the config in `src/integrations/firebase/config.ts`.
 
-## Firebase (deploying)
+## Firebase (deploying cloud function)
 
 1. Install Firebase CLI and log in:
 
@@ -92,7 +79,7 @@ firebase login
 
 ```bash
 npm run build
-firebase deploy --only hosting,functions
+firebase deploy --only functions
 ```
 
 Note: Cloud Functions live in the `functions/` folder — change into that directory to install dependencies and manage functions:
@@ -116,23 +103,3 @@ npm install
 
 - `npm run dev` — start local dev server (Vite)
 - `npm run build` — build production assets
-- `npm run preview` — preview the production build
-- `npm run lint` — run ESLint
-
-## Contributing
-
-- Fork the repo and open a pull request. Keep changes small and focused.
-- Run `npm run lint` and verify the app builds before submitting.
-
-## Troubleshooting
-
-- If Firebase auth or DB fails to initialize, confirm your `.env` values and Firebase project settings.
-- If ports are busy, change the Vite port in `vite.config.ts` or run with `PORT=your_port npm run dev`.
-
-## License
-
-This project has no license specified — add a `LICENSE` file if you want to define one.
-
-## Acknowledgements
-
-Built with popular OSS tooling: Vite, React, Tailwind, and Firebase. Inspired by event spinner apps used at conferences and meetups.
